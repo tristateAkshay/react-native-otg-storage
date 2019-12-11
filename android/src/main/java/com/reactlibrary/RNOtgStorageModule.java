@@ -51,7 +51,7 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
     private PendingIntent mPermissionIntent;
 
     private UsbMassStorageDevice mUsbMSDevice;
-    private static final String ACTION_USB_PERMISSION = "com.scizers.hello.mytest.USB_PERMISSION";
+    private static final String ACTION_USB_PERMISSION = "com.github.mjdev.libaums.USB_PERMISSION";
 
     private final ReactApplicationContext reactContext;
 
@@ -59,11 +59,11 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
         super(reactContext);
         this.reactContext = reactContext;
 
-        IntentFilter filter = new IntentFilter();
+        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        filter.addAction(ACTION_USB_PERMISSION);
         this.reactContext.registerReceiver(mUsbReceiver, filter);
+        Log.d(TAG, "RNOtgStorageModule: mUsbReceiver");
 
 
         mPermissionIntent = PendingIntent.getBroadcast(this.reactContext, 0, new Intent(ACTION_USB_PERMISSION), 0);
@@ -84,14 +84,16 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
 
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-
-            if (DEBUG)
-                logger("mUsbReceiver triggered. Action " + action);
+//            Log.d(TAG, "mUsbReceiver triggered. Action " + action);
 
             checkUSBStatus();
 
             if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 removedUSB();
+            }
+
+            if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+                connectDevice();
             }
 
             if (ACTION_USB_PERMISSION.equals(action)) {
@@ -101,10 +103,11 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
 
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         if (device != null) {
-                            // openDevice(device);
+//                             Log.d(TAG, "onReceive: device EXTRA_PERMISSION_GRANTED");
+                            openDevice();
                         }
                     } else {
-                        Log.e(TAG, "permission denied for device " + device);
+                        Log.d(TAG, "permission denied for device " + device);
                     }
                 }
             }
@@ -170,82 +173,92 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
 
     }
 
-    @ReactMethod
-    public void openDevice(Promise p) {
 
+    //    @ReactMethod
+    public void openDevice() {
+//        Log.d("Open 1","Connect If");
         if (mDetectedDevices.size() > 0) {
-
+//            Log.d("Open 2","Connect If");
             UsbMassStorageDevice[] devices = UsbMassStorageDevice.getMassStorageDevices(this.reactContext);
             if (devices.length > 0) {
+//                Log.d("Open 3","Connect If");
                 mUsbMSDevice = devices[0];
             }
-
+//            Log.d("Open 4","Connect If");
             WritableArray array = Arguments.createArray();
 
 
             try {
 
                 mUsbMSDevice.init();
+//                Log.d("Open 5","Connect If");
 
                 FileSystem fs = mUsbMSDevice.getPartitions().get(0).getFileSystem();
+//                Log.d("Open 8","" + mUsbMSDevice.getPartitions().get(0).getFileSystem());
                 UsbFile root = fs.getRootDirectory();
                 UsbFile[] files = root.listFiles();
                 for (UsbFile file : files) {
-                    if (file.isDirectory()) {
+                    if (!file.isDirectory()) {
+//                        Log.d("Open 7",""+file.getName());
                         array.pushString(file.getName());
                     }
                 }
 
             } catch (Exception e) {
                 logger(e.toString());
+//                Log.d("Open 6",""+e.getMessage());
             }
 
             WritableMap map = Arguments.createMap();
             map.putString("type", "success");
             map.putArray("directories", array);
 
-            p.resolve(map);
+//            p.resolve(map);
 
 
         } else {
             WritableMap map = Arguments.createMap();
             map.putString("type", "error");
             map.putString("message", "No Device Found");
-            p.resolve(map);
+//            p.resolve(map);
         }
 
     }
 
-    @ReactMethod
-    private void connectDevice(Promise p) {
+    //    @ReactMethod
+    private void connectDevice() {
 
         if (mDetectedDevices.size() > 0) {
             String deviceName;
             String serialNumber;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+//                Log.d("come 1","Connect If");
                 deviceName = (mDetectedDevices.get(0).getProductName());
-                 serialNumber = (mDetectedDevices.get(0).getSerialNumber());
-            } else {
+                serialNumber = (mDetectedDevices.get(0).getSerialNumber());
+
+            }
+            else {
+//                Log.d("come 2","connect else");
                 deviceName = (mDetectedDevices.get(0).getDeviceName());
-                   serialNumber = (mDetectedDevices.get(0).getSerialNumber());
+                serialNumber = (mDetectedDevices.get(0).getSerialNumber());
+
             }
 
             WritableMap map = Arguments.createMap();
             map.putString("type", "success");
             map.putString("deviceName", deviceName);
-              map.putString("serialNumber", serialNumber);
+            map.putString("serialNumber", serialNumber);
             UsbMassStorageDevice[] devices = UsbMassStorageDevice.getMassStorageDevices(this.reactContext);
             mUsbManager.requestPermission(mDetectedDevices.get(0), mPermissionIntent);
 
-            p.resolve(map);
-
+//            p.resolve(map);
 
         } else {
 
             WritableMap map = Arguments.createMap();
             map.putString("type", "error");
             map.putString("message", "No Device Found");
-            p.resolve(map);
+//            p.resolve(map);
 
         }
 
@@ -277,14 +290,15 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
     public void openRootFolder(String folderName, Callback callback) {
 
         try {
-
             WritableArray array = Arguments.createArray();
             FileSystem fs = mUsbMSDevice.getPartitions().get(0).getFileSystem();
             UsbFile root = fs.getRootDirectory();
             UsbFile[] files = root.listFiles();
 
             for (UsbFile file : files) {
-                if (file.isDirectory()) {
+
+                if (!file.isDirectory()) {
+
                     if (file.getName().equals(folderName)) {
                         UsbFile[] x = file.listFiles();
                         for (UsbFile y : x) {
@@ -300,7 +314,7 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
 
 
         } catch (Exception e) {
-
+            Log.d(TAG, "openRootFolder: error "+e.getMessage());
         }
 
 
@@ -308,47 +322,54 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void openRootFolderFile(String folderName, String fileName, Callback callback) {
-
+//        Log.d(TAG, "openRootFolder: 1");
         try {
+            if(mUsbMSDevice == null){
+                callback.invoke("Permission not granted");
+                return;
+            }
 
             FileSystem fs = mUsbMSDevice.getPartitions().get(0).getFileSystem();
             UsbFile root = fs.getRootDirectory();
             UsbFile[] files = root.listFiles();
+//            Log.d(TAG, "openRootFolder: "+files.length);
             Boolean worked = false;
 
             for (UsbFile file : files) {
-                if (file.isDirectory()) {
-                    if (file.getName().equals(folderName)) {
-                        UsbFile[] x = file.listFiles();
-                        for (UsbFile y : x) {
-                            if (!y.isDirectory()) {
+                if (!file.isDirectory()) {
+//                    Log.d("Open11111 ---",""+file.getName()+" -- "+folderName);
+                    if (file.getName().equals(fileName)) {
+//                        Log.d("Open >>>>>>",""+file.getName()+" -- "+folderName);
 
-                                if (y.getName().equals(fileName)) {
-
-                                    InputStream is = new UsbFileInputStream(y);
-                                    byte[] buffer = new byte[fs.getChunkSize()];
-                                    String response = convertStreamToString(is);
-                                    callback.invoke("success@" + response);
-                                    worked = true;
-
-                                }
-
-                            } else {
-                                callback.invoke("error@ Error some here");
-                            }
-                        }
+                        InputStream is = new UsbFileInputStream(file);
+                        byte[] buffer = new byte[fs.getChunkSize()];
+                        String response = convertStreamToString(is);
+                        callback.invoke(response);
+                        worked = true;
+//                        UsbFile[] x = file.listFiles();
+//                        for (UsbFile y : x) {
+//                            if (!y.isDirectory()) {
+//                                if (y.getName().equals(fileName)) {
+//
+//
+//                                }
+//
+//                            } else {
+//                                callback.invoke("error@ Error some here");
+//                            }
+//                        }
                     }
                 }
             }
 
 
             if (worked.equals(false)) {
-                callback.invoke("error@ File Not Found");
+                callback.invoke("File Not Found");
             }
 
 
         } catch (Exception e) {
-            callback.invoke("error@" + e.toString());
+            callback.invoke("File Not Found 1" + e.getLocalizedMessage());
         }
 
 
@@ -402,16 +423,8 @@ public class RNOtgStorageModule extends ReactContextBaseJavaModule {
                 }
             }
 
-
-
-
-
         } catch (Exception e) {
             callback.invoke("error@" + e.toString());
         }
-
-
     }
-
-
 }
